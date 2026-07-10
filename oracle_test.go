@@ -133,10 +133,23 @@ type oracleCase struct {
 	Opts  string `json:"opts"`
 }
 
-func TestDifferentialSrcAgainstMRI(t *testing.T) {
+// requireOracle skips the test unless a Ruby with the erubi gem is available.
+// The CI test lanes install the gem, but the arch/qemu lanes run a plain ubuntu
+// image that ships ruby without erubi, so probing for the ruby binary alone is
+// not enough: a bare `require 'erubi'` would fault and be reported as a failure
+// rather than a skip. Verify the gem actually loads.
+func requireOracle(t *testing.T) {
+	t.Helper()
 	if _, err := exec.LookPath("ruby"); err != nil {
 		t.Skip("ruby not on PATH; skipping differential oracle")
 	}
+	if err := exec.Command("ruby", "-e", "require 'erubi'; require 'erubi/capture_end'").Run(); err != nil {
+		t.Skip("erubi gem not installed; skipping differential oracle")
+	}
+}
+
+func TestDifferentialSrcAgainstMRI(t *testing.T) {
+	requireOracle(t)
 
 	var cases []oracleCase
 	var got []string
@@ -237,9 +250,7 @@ var renderCases = []renderCase{
 // to the erubi gem's own rendering, escape on and off, by eval'ing both under
 // Ruby with ::Erubi in scope.
 func TestDifferentialRenderAgainstMRI(t *testing.T) {
-	if _, err := exec.LookPath("ruby"); err != nil {
-		t.Skip("ruby not on PATH; skipping render oracle")
-	}
+	requireOracle(t)
 	for _, escape := range []bool{false, true} {
 		opts := Options{}
 		rubyOpts := ""
